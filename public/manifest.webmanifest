@@ -1,0 +1,22 @@
+{
+  "name": "RAKCHA GAME",
+  "short_name": "RAKCHA",
+  "description": "RAKCHA GAME - play social party games with friends or play against AI offline",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0F19",
+  "theme_color": "#0B0F19",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

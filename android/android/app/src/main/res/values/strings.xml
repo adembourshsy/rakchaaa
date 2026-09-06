@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">RAKCHA GAME</string>
+    <string name="title_activity_main">RAKCHA GAME</string>
+    <string name="package_name">com.antifada.app</string>
+    <string name="custom_url_scheme">com.antifada.app</string>
+
+    <!-- AdMob App ID (not an ad unit ID). Configured for RAKCHA GAME production. -->
+    <string name="admob_app_id">ca-app-pub-2670119965769261~6858700154</string>
+</resources>

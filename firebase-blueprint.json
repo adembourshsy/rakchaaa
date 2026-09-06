@@ -1,0 +1,163 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Registered or guest user account profile data",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "username": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "coins": { "type": "number" },
+        "rank": { "type": "string" },
+        "wins": { "type": "number" },
+        "role": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Room": {
+      "title": "Multiplayer Game Room",
+      "description": "Lobby and active session configuration for multiplayer games",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "title": { "type": "string" },
+        "gameId": { "type": "string" },
+        "gameTitle": { "type": "string" },
+        "mode": { "type": "string" },
+        "playType": { "type": "string" },
+        "hostId": { "type": "string" },
+        "hostName": { "type": "string" },
+        "hostAvatar": { "type": "string" },
+        "currentPlayers": { "type": "number" },
+        "maxPlayers": { "type": "number" },
+        "entryCost": { "type": "number" },
+        "isPrivate": { "type": "boolean" },
+        "status": { "type": "string" },
+        "playerIds": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "code", "hostId", "status"]
+    },
+    "ChatMessage": {
+      "title": "Room Chat Message",
+      "description": "In-room chat text message",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderAvatar": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["senderId", "senderName", "text"]
+    },
+    "FriendRequest": {
+      "title": "Friend Request",
+      "description": "Pending, accepted, or declined friend request",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "recipientId": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["senderId", "recipientId", "status"]
+    },
+    "RoomInvitation": {
+      "title": "Room Invitation",
+      "description": "Direct room invite from one player to another",
+      "type": "object",
+      "properties": {
+        "inviterId": { "type": "string" },
+        "recipientId": { "type": "string" },
+        "roomCode": { "type": "string" },
+        "gameId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["inviterId", "recipientId", "roomCode", "status"]
+    },
+    "Report": {
+      "title": "User Report",
+      "description": "Player report for inappropriate behavior",
+      "type": "object",
+      "properties": {
+        "reporterId": { "type": "string" },
+        "reportedUserId": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["reporterId", "reportedUserId", "reason", "status"]
+    },
+    "SupportMessage": {
+      "title": "Help / Support Contact Message",
+      "description": "In-app support contact ticket",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "type": { "type": "string" },
+        "category": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["senderId", "type", "message", "status"]
+    },
+    "GameState": {
+      "title": "Synchronized Game Session State",
+      "description": "Real-time state for active matches (Baloot/Belote, Uno, Intrus, Mecanque, Action Vérité)",
+      "type": "object",
+      "properties": {
+        "roomCode": { "type": "string" },
+        "status": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "User profiles collection"
+    },
+    "/friendRequests/{requestId}": {
+      "schema": { "$ref": "FriendRequest" },
+      "description": "Friend request invitations"
+    },
+    "/roomInvitations/{invitationId}": {
+      "schema": { "$ref": "RoomInvitation" },
+      "description": "In-game room invitations"
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "Report" },
+      "description": "UGC moderation reports"
+    },
+    "/supportMessages/{messageId}": {
+      "schema": { "$ref": "SupportMessage" },
+      "description": "Support help tickets"
+    },
+    "/antifada_rooms/{roomCode}": {
+      "schema": { "$ref": "Room" },
+      "description": "Active multiplayer game rooms"
+    },
+    "/antifada_rooms/{roomCode}/messages/{messageId}": {
+      "schema": { "$ref": "ChatMessage" },
+      "description": "In-room chat messages"
+    },
+    "/antifada_games/{roomCode}": {
+      "schema": { "$ref": "GameState" },
+      "description": "Active game sessions state"
+    },
+    "/games/{roomCode}": {
+      "schema": { "$ref": "GameState" },
+      "description": "Legacy game sessions state"
+    },
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "Room" },
+      "description": "Legacy rooms collection"
+    }
+  }
+}

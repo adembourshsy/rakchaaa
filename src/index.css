@@ -1,0 +1,532 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ============================================================
+   Mobile / Capacitor WebView technical fixes (no visual redesign).
+
+   Scrolling model (important):
+   html, body and #root are non-scrolling, full-height boxes. The app shell
+   (MobileContainer) is exactly 100dvh tall and contains ONE scroll
+   container (.app-scroll). This is required inside the Android WebView:
+   a body that grows taller than a `height:100%` / clipped ancestor simply
+   gets clipped and never becomes touch-scrollable.
+   ============================================================ */
+
+html,
+body {
+  height: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  height: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Native builds: lock the WebView viewport so only .app-scroll scrolls. */
+html.capacitor,
+html.capacitor body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* The single scrollable region of the app. */
+.app-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  /* Let the WebView handle vertical panning natively; block horizontal pan. */
+  touch-action: pan-y;
+}
+
+/* Nested scroll areas (chat, long lists, modals) keep their own momentum
+   without hijacking or blocking the parent scroll. */
+.app-scroll [class*="overflow-y-auto"] {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* Nothing may push the layout sideways on small phones. */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+/* Disable long-press callouts / text selection on native, except inputs. */
+html.capacitor * {
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.capacitor input,
+html.capacitor textarea,
+html.capacitor [contenteditable="true"] {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Keyboard height exposed by the native shell so focused inputs stay visible.
+   Applied to the scroll container (not #root) so the shell height stays
+   correct and the focused input can be scrolled into view. */
+:root {
+  --bg-primary: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F0F6FF;
+  --accent-primary: #47A5FF;
+  --accent-primary-dark: #3A92EE;
+  --accent-secondary: #FF8F00;
+  --text-primary: #000000;
+  --text-secondary: #4C5055;
+  --text-muted: #6C727A;
+  --danger: #EF4444;
+  --success: #10B981;
+  --border: #D5E5F7;
+  --border-light: #E6F0FC;
+
+  --app-bg: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-elevated: #F4F8FC;
+  --primary: #47A5FF;
+  --primary-hover: #3A92EE;
+  --premium: #FF8F00;
+
+  --space-xs: 8px;
+  --space-sm: 16px;
+  --space-md: 24px;
+  --space-lg: 32px;
+
+  --keyboard-height: 0px;
+}
+
+.dark {
+  --bg-primary: #090D16;
+  --bg-card: #131A29;
+  --bg-card-hover: #1E273C;
+  --accent-primary: #38BDF8;
+  --accent-primary-dark: #0284C7;
+  --accent-secondary: #F59E0B;
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --danger: #EF4444;
+  --success: #10B981;
+  --border: #1E293B;
+  --border-light: #162032;
+
+  --app-bg: #090D16;
+  --surface: #131A29;
+  --surface-elevated: #1E273C;
+  --primary: #38BDF8;
+  --primary-hover: #0284C7;
+  --premium: #F59E0B;
+}
+
+.font-display {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+.font-body {
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Safe area padding helper for scrollable pages */
+.safe-nav-padding {
+  padding-bottom: max(6.5rem, calc(env(safe-area-inset-bottom, 0px) + 5.5rem));
+}
+
+.pb-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pl-safe-left {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+.pr-safe-right {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+.px-safe-left {
+  /* env() only falls back to 16px when the browser doesn't support safe-area-inset at all.
+     On the vast majority of phones (no notch) it IS supported and simply resolves to 0px,
+     which silently defeats the 16px fallback and lets content butt against the screen edge.
+     max() guarantees a real minimum gap while still respecting larger insets when present. */
+  padding-left: max(16px, env(safe-area-inset-left, 16px));
+}
+
+.px-safe-right {
+  padding-right: max(16px, env(safe-area-inset-right, 16px));
+}
+
+html.capacitor.keyboard-open .app-scroll {
+  padding-bottom: calc(var(--keyboard-height) + 1.5rem);
+  scroll-padding-bottom: calc(var(--keyboard-height) + 1.5rem);
+}
+
+/* ============================================================
+   Avatar Circular Frame & Badge Animations
+   ============================================================ */
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spinReverse {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+@keyframes flameFlicker {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px #FF4500) drop-shadow(0 0 16px #FF8C00);
+  }
+  50% {
+    filter: drop-shadow(0 0 14px #FF3300) drop-shadow(0 0 24px #FFA500);
+  }
+}
+
+@keyframes frostShimmer {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px #00E5FF) drop-shadow(0 0 14px #38BDF8);
+  }
+  50% {
+    filter: drop-shadow(0 0 12px #7DD3FC) drop-shadow(0 0 20px #0284C7);
+  }
+}
+
+@keyframes waterRipple {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px #0284C7) drop-shadow(0 0 12px #38BDF8);
+  }
+  50% {
+    filter: drop-shadow(0 0 12px #0EA5E9) drop-shadow(0 0 18px #0284C7);
+  }
+}
+
+@keyframes goldRadiance {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px #FFD700) drop-shadow(0 0 16px #F59E0B);
+  }
+  50% {
+    filter: drop-shadow(0 0 14px #FDE047) drop-shadow(0 0 24px #D97706);
+  }
+}
+
+@keyframes cosmicShimmer {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px #8B5CF6) drop-shadow(0 0 16px #C084FC);
+  }
+  50% {
+    filter: drop-shadow(0 0 14px #A855F7) drop-shadow(0 0 22px #6366F1);
+  }
+}
+
+@keyframes diamondGlitz {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px #60A5FA) drop-shadow(0 0 16px #E0F2FE);
+  }
+  50% {
+    filter: drop-shadow(0 0 15px #93C5FD) drop-shadow(0 0 25px #38BDF8);
+  }
+}
+
+.anim-spin-slow {
+  animation: spinSlow 6s linear infinite;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.anim-spin-reverse {
+  animation: spinReverse 8s linear infinite;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.anim-pulse-glow {
+  animation: pulseGlow 2.5s ease-in-out infinite;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+.anim-flame-flicker {
+  animation: flameFlicker 1.8s ease-in-out infinite;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: filter;
+}
+
+.anim-frost-shimmer {
+  animation: frostShimmer 2.2s ease-in-out infinite;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: filter;
+}
+
+.anim-water-ripple {
+  animation: waterRipple 2.5s ease-in-out infinite;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: filter;
+}
+
+.anim-gold-radiance {
+  animation: goldRadiance 2s ease-in-out infinite;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: filter;
+}
+
+.anim-cosmic-shimmer {
+  animation: cosmicShimmer 3s ease-in-out infinite;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: filter;
+}
+
+.anim-diamond-glitz {
+  animation: diamondGlitz 2s ease-in-out infinite;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: filter;
+}
+
+/* Hardware Acceleration & Performance Enforcers for Tailwind Built-in Animations */
+.animate-spin,
+.animate-pulse,
+.animate-bounce,
+.animate-ping,
+[class*="animate-"] {
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+/* Automatic Dark Mode Palette Overrides (Eliminates White Elements in Dark Mode) */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark .bg-white {
+  background-color: #131A29;
+}
+
+html.dark .bg-\[\#F4F8FC\] {
+  background-color: #1A2234;
+}
+
+html.dark .bg-\[\#F0F6FF\] {
+  background-color: #1E273C;
+}
+
+html.dark .border-\[\#D5E5F7\] {
+  border-color: #222E46;
+}
+
+html.dark .text-\[\#000000\] {
+  color: #F8FAFC;
+}
+
+html.dark .text-\[\#4C5055\] {
+  color: #94A3B8;
+}
+
+html.dark .hover\:bg-\[\#F0F6FF\]:hover {
+  background-color: #1E273C;
+}
+
+html.dark .hover\:bg-\[\#F4F8FC\]:hover {
+  background-color: #222E46;
+}
+
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: #1A2234;
+  color: #F8FAFC;
+  border-color: #222E46;
+}
+
+/* High-Performance Mobile & GPU Optimization Rules */
+@media (max-width: 640px) {
+  /* Disable expensive backdrop-filter on mobile screens to prevent GPU stutter */
+  *, ::before, ::after {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* Mobile Touch & Scroll Performance Boosters */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.overflow-y-auto, .overflow-x-auto, .overflow-auto {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* GPU Hardware Acceleration for smooth game animations & card interaction */
+.transform-gpu,
+.game-card-accelerated,
+[class*="touch-none"],
+[class*="cursor-grab"],
+[class*="perspective-"],
+[class*="preserve-3d"] {
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+/* Enforce hardware acceleration & will-change on interactive hover/active states */
+.active\:scale-95:active,
+.active\:scale-98:active,
+.active\:scale-90:active,
+.hover\:scale-105:hover,
+.hover\:scale-110:hover,
+.group-hover\:scale-110 {
+  will-change: transform;
+}
+
+/* Smooth motion layers for game components */
+[data-framer-name],
+.motion-card,
+[class*="transition-"] {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* ============================================================
+   EXTREME APPEARANCE (i7trem appearance) — Cyber-Luxury Gaming UI
+   ================================================------------ */
+@keyframes extremeGlowPulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(71, 165, 255, 0.4), inset 0 0 15px rgba(71, 165, 255, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(71, 165, 255, 0.75), inset 0 0 25px rgba(71, 165, 255, 0.3);
+  }
+}
+
+@keyframes cyberBorderFlow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.extreme-glow {
+  animation: extremeGlowPulse 3s ease-in-out infinite;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: box-shadow;
+}
+
+.extreme-card {
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform, box-shadow;
+}
+
+.extreme-card:hover {
+  transform: translateY(-3px) scale(1.01);
+  box-shadow: 0 12px 35px -8px rgba(71, 165, 255, 0.35);
+}
+
+.extreme-glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(213, 229, 247, 0.8);
+}
+
+html.dark .extreme-glass {
+  background: rgba(19, 26, 41, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+}
+
+/* ============================================================
+   Immersive Fullscreen Mode during Active Gameplay
+   ============================================================ */
+html.game-immersive-mode,
+body.game-immersive-mode {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  touch-action: manipulation;
+}
+
+html.game-immersive-mode #root {
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+html.game-immersive-mode .app-scroll {
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+}
+
+
+

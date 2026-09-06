@@ -1,0 +1,6 @@
+{
+  "name": "Rakcha Game",
+  "description": "Minimalist social mobile gaming application for simple games, quizzes, challenges, multiplayer rooms, and friends.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

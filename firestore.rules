@@ -1,0 +1,401 @@
+rules_version = '2';
+
+// ============================================================
+//  firestore.rules — RAKCHA GAME (Production Security Rules)
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- Base Security & Auth Helpers -----------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function before() { return resource.data; }
+    function after()  { return request.resource.data; }
+
+    function roomDoc(code) {
+      return exists(/databases/$(database)/documents/antifada_rooms/$(code))
+        ? get(/databases/$(database)/documents/antifada_rooms/$(code)).data
+        : (exists(/databases/$(database)/documents/rooms/$(code))
+            ? get(/databases/$(database)/documents/rooms/$(code)).data
+            : null);
+    }
+
+    function isMemberOf(roomData) {
+      return isSignedIn()
+        && roomData != null
+        && (
+          ('playerIds' in roomData && roomData.playerIds is list && request.auth.uid in roomData.playerIds)
+          || ('hostId' in roomData && roomData.hostId == request.auth.uid)
+          || ('host' in roomData && roomData.host == request.auth.uid)
+        );
+    }
+
+    function playerIdsAdded() {
+      return after().playerIds.toSet().difference(before().playerIds.toSet());
+    }
+
+    function playerIdsRemoved() {
+      return before().playerIds.toSet().difference(after().playerIds.toSet());
+    }
+
+    // ---- Administration Role Verification ------------------
+    function isAuthorizedAdmin() {
+      return isSignedIn() && (
+        ('admin' in request.auth.token && request.auth.token.admin == true)
+        || ('email' in request.auth.token
+            && (request.auth.token.email == 'medakacha@gmail.com'
+                || request.auth.token.email == 'adem@gmail.com'))
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && 'role' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+            && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'admin_action_verite', 'admin_intrus', 'admin_mecanque']))
+      );
+    }
+
+    function isAdminActionVerite() {
+      return isAuthorizedAdmin();
+    }
+
+    function isAdminIntrus() {
+      return isAuthorizedAdmin();
+    }
+
+    function isAdminMecanque() {
+      return isAuthorizedAdmin();
+    }
+
+    function isAnyAdmin() {
+      return isAuthorizedAdmin();
+    }
+
+    function isAdmin() {
+      return isAuthorizedAdmin();
+    }
+
+    // ---- Protected User Field Helpers ---------------------
+    function isUserStatUnchanged(field) {
+      return !(field in request.resource.data)
+        || (resource != null && field in resource.data && request.resource.data[field] == resource.data[field]);
+    }
+
+    function isRoleUnchangedOrPlayer() {
+      return !('role' in request.resource.data)
+        || (resource != null && 'role' in resource.data && request.resource.data.role == resource.data.role)
+        || (resource != null && !('role' in resource.data) && request.resource.data.role == 'player');
+    }
+
+    function isProtectedUserStatsImmutable() {
+      return isAnyAdmin() || isRoleUnchangedOrPlayer();
+    }
+
+    // ---- users/{uid} ----------------------------------------
+    match /users/{uid} {
+      // Profile viewing is limited to authenticated players
+      allow read: if isSignedIn();
+
+      allow create: if isSelf(uid)
+        && (
+          !('role' in request.resource.data)
+          || request.resource.data.role == 'player'
+          || (request.resource.data.role in ['admin', 'admin_action_verite'] && isAdminActionVerite())
+          || (request.resource.data.role in ['admin', 'admin_intrus'] && isAdminIntrus())
+          || (request.resource.data.role in ['admin', 'admin_mecanque'] && isAdminMecanque())
+        )
+        && (!('coins' in request.resource.data) || request.resource.data.coins in [0, 100, 300] || isAnyAdmin())
+        && (!('diamonds' in request.resource.data) || request.resource.data.diamonds == 0 || isAnyAdmin())
+        && (!('xp' in request.resource.data) || request.resource.data.xp == 0 || isAnyAdmin())
+        && (!('level' in request.resource.data) || request.resource.data.level in [0, 1] || isAnyAdmin())
+        && (!('wins' in request.resource.data) || request.resource.data.wins == 0 || isAnyAdmin())
+        && (!('gamesPlayed' in request.resource.data) || request.resource.data.gamesPlayed == 0 || isAnyAdmin());
+
+      allow update: if isSelf(uid) && isProtectedUserStatsImmutable();
+
+      allow delete: if isSelf(uid);
+
+      // Private Block List (Play Store UGC compliance)
+      match /blocked/{blockedUid} {
+        allow read, write: if isSelf(uid);
+      }
+
+      // Hardened Friends Subcollection
+      // Prevents arbitrary third parties from fabricating or modifying friendships.
+      match /friends/{friendUid} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn()
+          && (request.auth.uid == uid || request.auth.uid == friendUid)
+          && friendUid != uid
+          && (
+            !('id' in request.resource.data) || request.resource.data.id == friendUid
+          );
+        allow delete: if isSignedIn()
+          && (request.auth.uid == uid || request.auth.uid == friendUid);
+      }
+    }
+
+    // ---- friendRequests/{requestId} (Hardened Friend Requests) ---------
+    // Sender can create 'pending' request to another user.
+    // Only the recipient can accept or decline.
+    // Neither party can mutate the senderId or recipientId.
+    match /friendRequests/{requestId} {
+      allow create: if isSignedIn()
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.recipientId is string
+        && request.resource.data.recipientId != request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      allow read: if isSignedIn()
+        && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid);
+
+      allow update: if isSignedIn()
+        && resource.data.recipientId == request.auth.uid
+        && request.resource.data.senderId == resource.data.senderId
+        && request.resource.data.recipientId == resource.data.recipientId
+        && request.resource.data.status in ['accepted', 'declined'];
+
+      allow delete: if isSignedIn()
+        && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid);
+    }
+
+    // ---- roomInvitations/{invitationId} (Hardened Room Invitations) -----
+    // Sender can create a 'pending' invitation to a specific user.
+    // Only the recipient can accept or decline the invitation.
+    // Senders cannot maliciously change status after sending.
+    match /roomInvitations/{invitationId} {
+      allow create: if isSignedIn()
+        && request.resource.data.inviterId == request.auth.uid
+        && request.resource.data.recipientId is string
+        && request.resource.data.recipientId != request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      allow read: if isSignedIn()
+        && (resource.data.inviterId == request.auth.uid || resource.data.recipientId == request.auth.uid);
+
+      allow update: if isSignedIn()
+        && resource.data.recipientId == request.auth.uid
+        && request.resource.data.inviterId == resource.data.inviterId
+        && request.resource.data.recipientId == resource.data.recipientId
+        && request.resource.data.status in ['accepted', 'declined'];
+
+      allow delete: if isSignedIn()
+        && (resource.data.inviterId == request.auth.uid || resource.data.recipientId == request.auth.uid);
+    }
+
+    // ---- settlements/{roomCode} (Server-authoritative settlement records) ----
+    match /settlements/{roomCode} {
+      allow read: if isSignedIn();
+      allow write: if false; // strictly server admin
+    }
+
+    // ---- gameNotifications/{notificationId} (Persistent Game Result Notifications) ----
+    match /gameNotifications/{notificationId} {
+      allow read, list: if isSignedIn() && resource.data.recipientId == request.auth.uid;
+      allow create: if false; // strictly server admin
+      allow update: if isSignedIn()
+        && resource.data.recipientId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if isSignedIn() && resource.data.recipientId == request.auth.uid;
+    }
+
+    // ---- feedback/{feedbackId} (User Feedback and Suggestions) ----
+    match /feedback/{feedbackId} {
+      allow read: if isAnyAdmin();
+      allow create: if true;
+      allow update, delete: if isAnyAdmin();
+    }
+
+    // ---- reports/{reportId} ---------------------------------
+    match /reports/{reportId} {
+      allow create: if isSignedIn()
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.reportedUserId is string
+        && request.resource.data.reportedUserId != request.auth.uid
+        && request.resource.data.reason is string
+        && request.resource.data.status == 'open'
+        && request.resource.data.keys().hasOnly(
+             ['reporterId', 'reportedUserId', 'reportedUsername', 'roomCode', 'messageId', 'messageText', 'reason', 'status', 'createdAt']);
+
+      allow read, update, delete: if isAnyAdmin();
+    }
+
+    // ---- supportMessages/{messageId} (Help Center: problem reports / contact support) --
+    match /supportMessages/{messageId} {
+      allow create: if isSignedIn()
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.type in ['problem', 'contact']
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 1000
+        && request.resource.data.status == 'open'
+        && request.resource.data.keys().hasOnly(
+             ['senderId', 'type', 'category', 'message', 'status', 'createdAt']);
+
+      allow read, update, delete: if isAnyAdmin();
+    }
+
+    // ---- cards/{cardId} (Action Vérité content bank) --------
+    match /cards/{cardId} {
+      allow read: if true;
+      allow create, update, delete: if isAdminActionVerite();
+    }
+
+    // ---- intrus_topics/{topicId} (L'INTRUS topics bank) -----
+    match /intrus_topics/{topicId} {
+      allow read: if true;
+      allow create, update, delete: if isAdminIntrus();
+    }
+
+    // ---- mecanque_cars/{carId} (Omour Mecanque cars bank) ----
+    match /mecanque_cars/{carId} {
+      allow read: if true;
+      allow create, update, delete: if isAdminMecanque();
+    }
+
+    // ---- antifada_games/{roomCode} (Multiplayer Game State) -
+    match /antifada_games/{roomCode} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && (isMemberOf(roomDoc(roomCode)) || isAnyAdmin());
+      allow delete: if false;
+    }
+
+    match /games/{roomCode} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && (isMemberOf(roomDoc(roomCode)) || isAnyAdmin());
+      allow delete: if false;
+    }
+
+    // ---- Room Update Helper Functions -----------------------
+    // 1) JOIN — a non-member adds only themselves to a waiting room
+    function isJoin() {
+      return isSignedIn()
+        && 'playerIds' in before()
+        && !(request.auth.uid in before().playerIds)
+        && request.auth.uid in after().playerIds
+        && playerIdsAdded().size() == 1
+        && playerIdsRemoved().size() == 0
+        && before().status == 'waiting'
+        && after().status == 'waiting'
+        && after().hostId == before().hostId
+        && after().playerIds.size() <= before().maxPlayers
+        && after().maxPlayers == before().maxPlayers
+        && after().isPrivate == before().isPrivate
+        && after().gameId == before().gameId;
+    }
+
+    // 2) MEMBER UPDATE — ready state toggle, heartbeat, or leaving (self only)
+    function isMemberUpdate() {
+      return isMemberOf(before())
+        && playerIdsAdded().size() == 0
+        && (
+             playerIdsRemoved().size() == 0
+             || (playerIdsRemoved().size() == 1 && request.auth.uid in playerIdsRemoved())
+           )
+        && after().gameId == before().gameId
+        && after().maxPlayers == before().maxPlayers
+        && after().isPrivate == before().isPrivate
+        && (after().status == before().status
+            || (after().status == 'completed' && after().playerIds.size() == 0))
+        && (after().hostId == before().hostId
+            || (request.auth.uid == before().hostId
+                && after().hostId in after().playerIds));
+    }
+
+    // 3) HOST UPDATE — start game, kick player, host handoff, room settings
+    function isHostUpdate() {
+      return isSignedIn()
+        && request.auth.uid == before().hostId
+        && playerIdsAdded().size() == 0
+        && after().gameId == before().gameId
+        && (after().hostId == before().hostId || after().hostId in after().playerIds)
+        && after().status in ['waiting', 'in_progress', 'completed'];
+    }
+
+    // 4) GHOST EVICTION & HOST REASSIGNMENT — active player evicts disconnected members
+    function isGhostEviction() {
+      return isMemberOf(before())
+        && request.auth.uid in after().playerIds
+        && playerIdsAdded().size() == 0
+        && after().playerIds.size() > 0
+        && after().hostId in after().playerIds
+        && after().gameId == before().gameId
+        && after().maxPlayers == before().maxPlayers
+        && after().isPrivate == before().isPrivate
+        && after().status in ['waiting', 'in_progress', 'completed'];
+    }
+
+    // 5) EMPTY ROOM CLEANUP — closing abandoned rooms with 0 players
+    function isEmptyRoomCleanup() {
+      return isSignedIn()
+        && after().status == 'completed'
+        && after().playerIds is list
+        && after().playerIds.size() == 0
+        && after().currentPlayers == 0;
+    }
+
+    // 6) LEGACY BACKFILL — self-healing old room documents without playerIds
+    function isLegacyBackfill() {
+      return isSignedIn()
+        && !('playerIds' in before())
+        && after().playerIds is list
+        && request.auth.uid in after().playerIds
+        && after().players == before().players
+        && after().status == before().status
+        && after().hostId == before().hostId
+        && after().currentPlayers == before().currentPlayers
+        && after().maxPlayers == before().maxPlayers;
+    }
+
+    // ---- antifada_rooms/{roomCode} (Primary Hardened Room Collection) -----
+    match /antifada_rooms/{roomCode} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if isJoin() || isMemberUpdate() || isHostUpdate() || isGhostEviction() || isEmptyRoomCleanup() || isLegacyBackfill() || isAnyAdmin();
+      allow delete: if false;
+
+      // ---- antifada_rooms/{roomCode}/messages/{messageId} (In-room Chat)
+      match /messages/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update: if false;
+        allow delete: if false;
+      }
+
+      // ---- antifada_rooms/{roomCode}/reactions/{reactionId} (In-room Live Emoji Reactions)
+      match /reactions/{reactionId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+
+    // ---- rooms/{roomId} (Secondary / Legacy Rooms Path Protection) ----
+    match /rooms/{roomId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if isJoin() || isMemberUpdate() || isHostUpdate() || isGhostEviction() || isEmptyRoomCleanup() || isLegacyBackfill() || isAnyAdmin();
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update: if false;
+        allow delete: if false;
+      }
+
+      match /reactions/{reactionId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+  }
+}
